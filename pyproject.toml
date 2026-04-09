@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bgg-scraper"
+version = "0.1.0"
+description = "Scrape BGG forum threads to Markdown files"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "Pietro Coelho"},
+]
+keywords = ["boardgamegeek", "bgg", "scraper", "markdown", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
+dependencies = [
+    "requests>=2.31",
+    "cloudscraper>=1.2",
+    "python-dotenv>=1.0",
+    "lxml>=5.0",
+    "click>=8.1",
+    "tqdm>=4.66",
+    "tenacity>=8.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.2",
+    "pytest>=8.0",
+]
+
+[project.scripts]
+bgg-scraper = "bgg_scraper.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<thread id="1001" subject="How do I set up the board?" author="player1"
+        numarticles="3"
+        link="https://boardgamegeek.com/thread/1001"
+        termsofuse="https://boardgamegeek.com/xmlapi/termsofuse">
+  <articles>
+    <article id="5001" username="player1" link="https://boardgamegeek.com/article/5001"
+             postdate="2023-04-15T10:00:00-05:00" editdate=""
+             subject="How do I set up the board?" numrecommends="0">
+      <body>The rulebook says to place the pixel tiles face-down but the setup diagram shows them face-up. Which is correct? &lt;br/&gt;&lt;br/&gt;Thanks!</body>
+    </article>
+    <article id="5002" username="designer_jane" link="https://boardgamegeek.com/article/5002"
+             postdate="2023-04-16T09:00:00-05:00" editdate="2023-04-16T10:00:00-05:00"
+             subject="Re: How do I set up the board?" numrecommends="5">
+      <body>Great catch! The diagram is correct &amp;mdash; tiles go &lt;b&gt;face-up&lt;/b&gt;. The rulebook has a typo that will be fixed in the next print run.</body>
+    </article>
+    <article id="5003" username="player1" link="https://boardgamegeek.com/article/5003"
+             postdate="2023-04-16T12:00:00-05:00" editdate=""
+             subject="Re: How do I set up the board?" numrecommends="0">
+      <body>Thanks, that makes sense now!</body>
+    </article>
+  </articles>
+</thread>

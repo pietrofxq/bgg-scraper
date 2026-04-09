@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<forum id="66" title="Rules" description="Rules questions and clarifications"
+       numthreads="3" numposts="12"
+       termsofuse="https://boardgamegeek.com/xmlapi/termsofuse">
+  <threads>
+    <thread id="1001" subject="How do I set up the board?" author="player1"
+            numarticles="3"
+            postdate="2023-04-15T10:00:00-05:00"
+            lastpostdate="2023-04-16T12:00:00-05:00" />
+    <thread id="1002" subject="What happens when tiles run out?" author="player2"
+            numarticles="2"
+            postdate="2023-04-17T09:00:00-05:00"
+            lastpostdate="2023-04-17T15:00:00-05:00" />
+    <thread id="1003" subject="Can I play with 2 players?" author="player3"
+            numarticles="7"
+            postdate="2023-04-18T08:00:00-05:00"
+            lastpostdate="2023-04-20T11:00:00-05:00" />
+  </threads>
+</forum>
