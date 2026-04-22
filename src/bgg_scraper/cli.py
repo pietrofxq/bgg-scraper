@@ -4,6 +4,7 @@ import re
 import sys
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -152,6 +153,14 @@ def _fetch_thread(client: BGGClient, thread_id: int, subject: str = "") -> objec
 
         art_page += 1
     _log.debug("Thread %d: %d total articles across %d page(s)", thread_id, len(all_articles), art_page)
+
+    user_ids = {
+        a["author"] for a in all_articles
+        if isinstance(a.get("author"), int)
+    }
+    if user_ids:
+        client.prefetch_usernames(user_ids)
+
     return parse_articles(
         thread_id, subject,
         {"articles": all_articles, "total": len(all_articles)},
@@ -246,6 +255,8 @@ def search_cmd(query: str, username: str, password: str, delay: float, verbose: 
               help="Limit number of threads to fetch (useful for testing).")
 @click.option("--designer", default=None, envvar="BGG_DESIGNER",
               help="BGG username of the game designer (or set BGG_DESIGNER env var). Their replies are marked '— Designer'.")
+@click.option("--workers", "-w", default=4, show_default=True, type=int,
+              help="Number of concurrent thread fetchers.")
 @click.option("--verbose", "-v", is_flag=True, default=False,
               help="Enable debug logging.")
 def scrape_cmd(
@@ -258,6 +269,7 @@ def scrape_cmd(
     delay: float,
     max_threads: int | None,
     designer: str | None,
+    workers: int,
     verbose: bool,
 ) -> None:
     """Scrape a BGG forum and write each thread as a Markdown file.
@@ -340,28 +352,44 @@ def scrape_cmd(
     # --- Fetch each thread's articles and write to .md ---
     start = time.time()
     written = skipped = 0
+    errors = 0
 
-    for stub in tqdm(all_stubs, desc="Threads", unit="thread"):
-        thread_id = stub["id"]
-        subject = stub["subject"]
-
-        # Skip if a file with this thread ID already exists
-        existing = list(out_path.glob(f"{thread_id}_*.md"))
+    stubs_to_fetch = []
+    for stub in all_stubs:
+        existing = list(out_path.glob(f"{stub['id']}_*.md"))
         if existing:
-            _log.debug("Skipping thread %d — file exists: %s", thread_id, existing[0])
+            _log.debug("Skipping thread %d — file exists: %s", stub["id"], existing[0])
             skipped += 1
-            continue
+        else:
+            stubs_to_fetch.append(stub)
 
-        thread = _fetch_thread(client, thread_id, subject)
-
+    def _process_stub(stub: dict) -> bool:
+        thread = _fetch_thread(client, stub["id"], stub["subject"])
         dest = out_path / output_filename(thread)
         _write_text_atomic(dest, thread_to_markdown(thread, designer=designer))
-        written += 1
+        return True
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = {pool.submit(_process_stub, s): s for s in stubs_to_fetch}
+        with tqdm(total=len(stubs_to_fetch), desc="Threads", unit="thread") as pbar:
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                    written += 1
+                except Exception as exc:
+                    stub = futures[future]
+                    click.echo(
+                        f"\nError fetching thread {stub['id']} ({stub['subject']!r}): {exc}",
+                        err=True,
+                    )
+                    errors += 1
+                pbar.update(1)
 
     elapsed = time.time() - start
-    click.echo(
-        f"\nDone in {elapsed:.1f}s — {written} written, {skipped} skipped (already existed)"
-    )
+    parts = [f"{written} written", f"{skipped} skipped"]
+    if errors:
+        parts.append(f"{errors} errors")
+    click.echo(f"\nDone in {elapsed:.1f}s — {', '.join(parts)}")
 
 
 # ── thread command ────────────────────────────────────────────────────────────

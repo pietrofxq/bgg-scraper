@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 
 import cloudscraper
@@ -39,6 +40,8 @@ class BGGClient:
         self.session = cloudscraper.create_scraper()
         self.session.headers.update(_JSON_HEADERS)
         self._user_cache: dict[int, str] = {}
+        self._last_request_time: float = 0.0
+        self._lock = threading.Lock()
 
     def login(self, username: str, password: str) -> None:
         """Authenticate with BGG and store the session cookie."""
@@ -61,6 +64,12 @@ class BGGClient:
                 msg = resp.text
             raise AuthError(f"BGG login failed ({resp.status_code}): {msg}")
 
+    def _rate_limit(self) -> None:
+        elapsed = time.monotonic() - self._last_request_time
+        remaining = self.delay - elapsed
+        if remaining > 0:
+            time.sleep(remaining)
+
     @retry(
         retry=retry_if_exception(_is_retryable),
         wait=wait_exponential(multiplier=1, min=2, max=60),
@@ -70,11 +79,13 @@ class BGGClient:
     )
     def _get_json(self, path: str, params: dict) -> dict:
         url = f"{BGG_BASE}{path}"
-        log.debug("GET %s params=%s", url, params)
-        resp = self.session.get(url, params=params, timeout=30)
+        with self._lock:
+            self._rate_limit()
+            log.debug("GET %s params=%s", url, params)
+            resp = self.session.get(url, params=params, timeout=30)
+            self._last_request_time = time.monotonic()
         log.debug("Response: HTTP %s (%d bytes)", resp.status_code, len(resp.content))
         resp.raise_for_status()
-        time.sleep(self.delay)
         data = resp.json()
         if not data:
             log.warning("Empty JSON response from %s params=%s", url, params)
@@ -143,3 +154,8 @@ class BGGClient:
             except Exception:
                 self._user_cache[user_id] = str(user_id)
         return self._user_cache[user_id]
+
+    def prefetch_usernames(self, user_ids: set[int]) -> None:
+        """Resolve and cache usernames for all given IDs (skips already-cached)."""
+        for uid in user_ids - self._user_cache.keys():
+            self.get_username(uid)
