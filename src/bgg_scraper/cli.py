@@ -5,6 +5,7 @@ import sys
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -17,6 +18,32 @@ from tqdm import tqdm
 from .client import AuthError, BGGClient
 from .formatter import output_filename, slug, thread_to_markdown
 from .parser import parse_articles, parse_forum_threads_page
+
+# Explicit tqdm bar format: labels every field instead of the cryptic
+# default "[00:49<00:00, 8.27s/it]" form. Renders as e.g.
+# "Threads:  45%|████▌     | 9/20 [elapsed 01:14 · ETA 01:30 · 8.27s/thread]"
+_BAR_FORMAT = (
+    "{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} "
+    "[elapsed {elapsed} · ETA {remaining} · {rate_fmt}]"
+)
+# Same idea, but for unbounded bars (no total / no ETA).
+_BAR_FORMAT_INDETERMINATE = (
+    "{desc}: {n_fmt} [elapsed {elapsed} · {rate_fmt}]"
+)
+
+
+def _format_duration(seconds: float) -> str:
+    """Human-readable duration: '0.4s', '12s', '1m 23s', '1h 2m 3s'."""
+    if seconds < 1:
+        return f"{seconds:.1f}s"
+    total = int(round(seconds))
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h {m}m {s}s"
+    if m:
+        return f"{m}m {s}s"
+    return f"{s}s"
 
 # ── Shared auth options ────────────────────────────────────────────────────────
 
@@ -315,7 +342,7 @@ def scrape_cmd(
     end_page: int | None = None
     forum_title = ""
 
-    with tqdm(desc="Pages", unit="page") as pbar:
+    with tqdm(desc="Pages", unit="page", bar_format=_BAR_FORMAT_INDETERMINATE) as pbar:
         while True:
             data = client.get_forum_threads_page(game_id, forum_id, page=page)
             forum_page = parse_forum_threads_page(data, game_id, forum_id)
@@ -324,6 +351,9 @@ def scrape_cmd(
                 end_page = forum_page.end_page
                 forum_title = forum_page.title
                 click.echo(f"Forum: {forum_title!r} — {forum_page.num_threads} threads total")
+                pbar.total = end_page
+                pbar.bar_format = _BAR_FORMAT
+                pbar.refresh()
 
             for stub in forum_page.threads:
                 if stub["id"] not in seen_ids:
@@ -351,6 +381,8 @@ def scrape_cmd(
 
     # --- Fetch each thread's articles and write to .md ---
     start = time.time()
+    started_at = datetime.now()
+    click.echo(f"Started at {started_at:%Y-%m-%d %H:%M:%S}")
     written = skipped = 0
     errors = 0
 
@@ -371,7 +403,12 @@ def scrape_cmd(
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
         futures = {pool.submit(_process_stub, s): s for s in stubs_to_fetch}
-        with tqdm(total=len(stubs_to_fetch), desc="Threads", unit="thread") as pbar:
+        with tqdm(
+            total=len(stubs_to_fetch),
+            desc="Threads",
+            unit="thread",
+            bar_format=_BAR_FORMAT,
+        ) as pbar:
             for future in as_completed(futures):
                 try:
                     future.result()
@@ -386,10 +423,15 @@ def scrape_cmd(
                 pbar.update(1)
 
     elapsed = time.time() - start
-    parts = [f"{written} written", f"{skipped} skipped"]
+    finished_at = datetime.now()
+    result_parts = [f"{written} written", f"{skipped} skipped"]
     if errors:
-        parts.append(f"{errors} errors")
-    click.echo(f"\nDone in {elapsed:.1f}s — {', '.join(parts)}")
+        result_parts.append(f"{errors} errors")
+    click.echo("")
+    click.echo(f"Started:  {started_at:%Y-%m-%d %H:%M:%S}")
+    click.echo(f"Finished: {finished_at:%Y-%m-%d %H:%M:%S}")
+    click.echo(f"Duration: {_format_duration(elapsed)}")
+    click.echo(f"Result:   {', '.join(result_parts)}")
 
 
 # ── thread command ────────────────────────────────────────────────────────────
@@ -443,9 +485,18 @@ def thread_cmd(
         click.echo(f"Skipped — already exists: {existing[0]}")
         return
 
+    started_at = datetime.now()
+    click.echo(f"Started at {started_at:%Y-%m-%d %H:%M:%S}")
     click.echo(f"Fetching thread {thread_id}...")
+    start = time.time()
     thread = _fetch_thread(client, thread_id, subject=_thread_subject_hint(url))
 
     dest = out_path / output_filename(thread)
     _write_text_atomic(dest, thread_to_markdown(thread, designer=designer))
-    click.echo(f"Written: {dest}")
+    elapsed = time.time() - start
+    finished_at = datetime.now()
+    click.echo("")
+    click.echo(f"Started:  {started_at:%Y-%m-%d %H:%M:%S}")
+    click.echo(f"Finished: {finished_at:%Y-%m-%d %H:%M:%S}")
+    click.echo(f"Duration: {_format_duration(elapsed)}")
+    click.echo(f"Written:  {dest}")
